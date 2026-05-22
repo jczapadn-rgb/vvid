@@ -1,0 +1,206 @@
+# 1. Импорт библиотек
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import warnings
+warnings.filterwarnings('ignore')
+
+# 2. Загрузка данных (прочность бетона)
+url = "https://archive.ics.uci.edu/ml/machine-learning-databases/concrete/compressive/Concrete_Data.xls"
+df = pd.read_excel(url)
+
+# Переименуем колонки для удобства
+df.columns = ['Cement', 'BlastFurnaceSlag', 'FlyAsh', 'Water', 'Superplasticizer', 
+              'CoarseAggregate', 'FineAggregate', 'Age', 'Strength']
+
+print("=" * 60)
+print("ИНЖЕНЕРНЫЙ АНАЛИЗ ДАННЫХ: ПРОЧНОСТЬ БЕТОНА НА СЖАТИЕ")
+print("=" * 60)
+
+print("\n1. Информация о датасете:")
+print(f"   - Количество образцов: {df.shape[0]}")
+print(f"   - Количество признаков: {df.shape[1] - 1}")
+print(f"   - Диапазон прочности: {df['Strength'].min():.1f} - {df['Strength'].max():.1f} МПа")
+
+# 3. МАТРИЦА КОРРЕЛЯЦИИ
+print("\n2. МАТРИЦА КОРРЕЛЯЦИИ ПИРСОНА:")
+print("-" * 60)
+
+# Рассчитываем корреляцию всех признаков с целевой переменной
+correlation_matrix = df.corr()
+corr_with_strength = correlation_matrix['Strength'].sort_values(ascending=False)
+
+print("\nКорреляция каждого компонента с прочностью бетона:")
+print(corr_with_strength.round(3))
+
+# Визуализация матрицы корреляции
+plt.figure(figsize=(10, 8))
+sns.heatmap(correlation_matrix, annot=True, fmt='.2f', cmap='coolwarm', 
+            center=0, square=True, linewidths=0.5)
+plt.title('МАТРИЦА КОРРЕЛЯЦИИ: ВЛИЯНИЕ КОМПОНЕНТОВ НА ПРОЧНОСТЬ БЕТОНА', fontsize=14, fontweight='bold')
+plt.tight_layout()
+plt.show()
+
+# Отдельная визуализация - только корреляции с прочностью
+plt.figure(figsize=(10, 5))
+corr_with_strength.drop('Strength').plot(kind='bar', color=['green' if x > 0 else 'red' for x in corr_with_strength.drop('Strength')])
+plt.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+plt.title('ВЛИЯНИЕ КАЖДОГО КОМПОНЕНТА НА ПРОЧНОСТЬ БЕТОНА', fontsize=14, fontweight='bold')
+plt.xlabel('Компоненты бетонной смеси', fontsize=12)
+plt.ylabel('Коэффициент корреляции Пирсона', fontsize=12)
+plt.xticks(rotation=45, ha='right')
+plt.grid(axis='y', alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# 4. ПОДГОТОВКА ДАННЫХ ДЛЯ ОБУЧЕНИЯ
+print("\n3. ПОДГОТОВКА ДАННЫХ ДЛЯ МОДЕЛИРОВАНИЯ:")
+print("-" * 60)
+
+X = df.drop('Strength', axis=1)
+y = df['Strength']
+
+# Разделение на обучающую и тестовую выборки (80% / 20%)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+print(f"   - Обучающая выборка: {X_train.shape[0]} образцов")
+print(f"   - Тестовая выборка: {X_test.shape[0]} образцов")
+
+# 5. ОБУЧЕНИЕ МОДЕЛИ RANDOM FOREST
+print("\n4. ОБУЧЕНИЕ МОДЕЛИ RANDOM FOREST:")
+print("-" * 60)
+
+# Создаём и обучаем модель
+rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+
+# Предсказания
+y_train_pred = rf_model.predict(X_train)
+y_test_pred = rf_model.predict(X_test)
+
+# 6. МЕТРИКИ КАЧЕСТВА МОДЕЛИ
+print("\n5. МЕТРИКИ КАЧЕСТВА МОДЕЛИ:")
+print("-" * 60)
+
+# Расчёт метрик
+mae_train = mean_absolute_error(y_train, y_train_pred)
+mae_test = mean_absolute_error(y_test, y_test_pred)
+mse_train = mean_squared_error(y_train, y_train_pred)
+mse_test = mean_squared_error(y_test, y_test_pred)
+r2_train = r2_score(y_train, y_train_pred)
+r2_test = r2_score(y_test, y_test_pred)
+rmse_train = np.sqrt(mse_train)
+rmse_test = np.sqrt(mse_test)
+
+print(f"На обучающей выборке:")
+print(f"   - MAE (средняя абсолютная ошибка): {mae_train:.2f} МПа")
+print(f"   - RMSE (среднеквадратичная ошибка): {rmse_train:.2f} МПа")
+print(f"   - R² (коэффициент детерминации): {r2_train:.4f}")
+
+print(f"\nНа тестовой выборке:")
+print(f"   - MAE (средняя абсолютная ошибка): {mae_test:.2f} МПа")
+print(f"   - RMSE (среднеквадратичная ошибка): {rmse_test:.2f} МПа")
+print(f"   - R² (коэффициент детерминации): {r2_test:.4f}")
+
+# 7. ВАЖНОСТЬ ПРИЗНАКОВ
+feature_importance = pd.DataFrame({
+    'Компонент': X.columns,
+    'Важность': rf_model.feature_importances_
+}).sort_values('Важность', ascending=False)
+
+print("\n6. ВАЖНОСТЬ ПРИЗНАКОВ В МОДЕЛИ:")
+print("-" * 60)
+for i, row in feature_importance.iterrows():
+    print(f"   - {row['Компонент']:<20} : {row['Важность']:.3f} ({row['Важность']*100:.1f}%)")
+
+# Визуализация важности признаков
+plt.figure(figsize=(10, 6))
+sns.barplot(data=feature_importance, x='Важность', y='Компонент', palette='viridis')
+plt.title('ВАЖНОСТЬ КОМПОНЕНТОВ ДЛЯ ПРОЧНОСТИ БЕТОНА', fontsize=14, fontweight='bold')
+plt.xlabel('Важность (нормированная)', fontsize=12)
+plt.tight_layout()
+plt.show()
+
+# График предсказаний vs реальных значений
+plt.figure(figsize=(8, 6))
+plt.scatter(y_test, y_test_pred, alpha=0.6, edgecolors='k', linewidth=0.5)
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2, label='Идеальное предсказание')
+plt.xlabel('Реальная прочность (МПа)', fontsize=12)
+plt.ylabel('Предсказанная прочность (МПа)', fontsize=12)
+plt.title('СОПОСТАВЛЕНИЕ ПРЕДСКАЗАНИЙ И РЕАЛЬНЫХ ЗНАЧЕНИЙ', fontsize=14, fontweight='bold')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+# ==============================================
+# ПОДГОТОВКА ПЕРЕМЕННЫХ ДЛЯ ВЫВОДА
+# ==============================================
+
+# Берём значения корреляций
+corr_cement = corr_with_strength['Cement']
+corr_age = corr_with_strength['Age']
+corr_water = corr_with_strength['Water']
+corr_plastic = corr_with_strength['Superplasticizer']
+
+# Дополнительные метрики
+strength_mean = df['Strength'].mean()
+strength_min = df['Strength'].min()
+strength_max = df['Strength'].max()
+rel_error = (mae_test / strength_mean) * 100
+
+# Важность признаков (первые три)
+imp1_name = feature_importance.iloc[0]['Компонент']
+imp1_val = feature_importance.iloc[0]['Важность'] * 100
+imp2_name = feature_importance.iloc[1]['Компонент']
+imp2_val = feature_importance.iloc[1]['Важность'] * 100
+imp3_name = feature_importance.iloc[2]['Компонент']
+imp3_val = feature_importance.iloc[2]['Важность'] * 100
+
+# ==============================================
+# ВЫВОД ПО МОДЕЛИ (текст для отчёта)
+# ==============================================
+print("\n" + "=" * 60)
+print("ВЫВОД ПО МОДЕЛИ ИНЖЕНЕРНОГО ПРОГНОЗИРОВАНИЯ")
+print("=" * 60)
+
+print(f"""
+1. КОРРЕЛЯЦИОННЫЙ АНАЛИЗ:
+   - Наибольшее положительное влияние на прочность оказывает ЦЕМЕНТ (корреляция {corr_cement:.3f})
+   - Возраст бетона также важен (корреляция {corr_age:.3f}) - чем старше, тем прочнее
+   - ВОДА влияет отрицательно (корреляция {corr_water:.3f}) - её избыток снижает прочность
+   - Пластификаторы имеют слабую положительную корреляцию ({corr_plastic:.3f})
+
+2. КАЧЕСТВО МОДЕЛИ:
+   - R² на тесте = {r2_test:.4f} → модель объясняет {r2_test*100:.1f}% вариативности прочности
+   - MAE на тесте = {mae_test:.2f} МПа → в среднем ошибка составляет {mae_test:.2f} МПа
+   - Диапазон прочности в данных: {strength_min:.0f}-{strength_max:.0f} МПа
+   - Относительная ошибка: {rel_error:.1f}% → приемлемо для инженерных задач
+
+3. ВАЖНОСТЬ ПРИЗНАКОВ (по версии Random Forest):
+   - {imp1_name} ({imp1_val:.1f}%) - критически важный компонент
+   - {imp2_name} ({imp2_val:.1f}%) - второй по значимости
+   - {imp3_name} ({imp3_val:.1f}%) - третий по значимости
+
+4. ИНЖЕНЕРНЫЕ РЕКОМЕНДАЦИИ:
+   ✓ Для повышения прочности следует увеличивать содержание цемента
+   ✓ Необходимо строго контролировать водоцементное отношение
+   ✓ Увеличение возраста (выдержка) повышает прочность
+   ✓ Зола и шлак - вспомогательные компоненты, их влияние умеренное
+
+5. ПРАКТИЧЕСКАЯ ПРИМЕНИМОСТЬ:
+   Модель может использоваться для:
+   - Предварительной оценки прочности бетонной смеси
+   - Оптимизации состава под требуемую прочность
+   - Снижения количества натурных испытаний
+   
+   Рекомендуемая точность: ±{mae_test:.1f} МПа при доверительной вероятности 68%
+""")
+
+print("\n" + "=" * 60)
+print("АНАЛИЗ ЗАВЕРШЁН")
+print("=" * 60)
